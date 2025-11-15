@@ -78,7 +78,6 @@ st.markdown("""
 st.markdown('<h1 class="main-header">🚫 AI Hate Speech & Cyberbullying Detection</h1>', unsafe_allow_html=True)
 st.markdown("""
 This advanced AI system detects **hate speech**, **cyberbullying**, and **neutral content** in social media text.
-Developed as part of NLP Course Project at NED University.
 """)
 
 # Sidebar
@@ -403,10 +402,11 @@ def main():
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center'>
-    <p><strong>🚫 AI Hate Speech & Cyberbullying Detection System</strong></p>
-    <p>Natural Language Processing Project | NED University</p>
+    <p><strong>NED University of Engineering & Technology</strong></p>
+    <p>Natural Language Processing Project</p>
 </div>
 """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
+
