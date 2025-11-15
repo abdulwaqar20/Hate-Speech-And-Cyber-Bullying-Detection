@@ -9,8 +9,6 @@ import nltk
 from nltk.corpus import stopwords
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import classification_report, confusion_matrix
-import plotly.express as px
 import plotly.graph_objects as go
 
 # Download stopwords
@@ -108,12 +106,6 @@ with st.sidebar:
     show_details = st.checkbox("Show detailed analysis", value=True)
     show_confidence = st.checkbox("Show confidence scores", value=True)
     use_enhanced_rules = st.checkbox("Use enhanced rule-based detection", value=True)
-    
-    st.header("📈 Live Performance")
-    st.metric("Overall Accuracy", "82.0%")
-    st.metric("Weighted F1-Score", "82.5%")
-    st.metric("Hate Speech F1", "92.8%", "+45.8%")
-    st.metric("Cyberbullying F1", "77.9%")
 
 # Load models and components
 @st.cache_resource
@@ -207,35 +199,15 @@ def main():
         return
     
     # Tabs for different functionalities
-    tab1, tab2, tab3 = st.tabs(["🔍 Single Text Analysis", "📁 Batch File Analysis", "📊 Model Insights"])
+    tab1, tab2, tab3 = st.tabs(["🔍 Text Analysis", "📊 Performance", "ℹ️ About"])
     
     with tab1:
-        st.header("Analyze Single Text")
-        
-        # Example texts for quick testing
-        st.subheader("💡 Try these examples:")
-        examples = {
-            "Religious Hate Speech": "All muslims are terrorists and should be exterminated",
-            "Gender Hate Speech": "Women are too emotional to hold public office",
-            "Immigration Hate": "Immigrants are invading our country and should be deported",
-            "Severe Cyberbullying": "You're a complete idiot and your mother should have aborted you",
-            "Appearance Bullying": "You're so ugly and fat, nobody would ever like you",
-            "Suicide Encouragement": "Go kill yourself, you worthless piece of garbage",
-            "Neutral Opinion": "I strongly disagree with your political views",
-            "Friendly Text": "The weather is really nice today for a walk"
-        }
-        
-        cols = st.columns(4)
-        for i, (desc, example) in enumerate(examples.items()):
-            with cols[i % 4]:
-                if st.button(f"**{desc}**", use_container_width=True, help=example):
-                    st.session_state.example_text = example
+        st.header("Text Analysis")
         
         # Text input
         text_input = st.text_area(
             "Enter text to analyze:",
-            value=st.session_state.get('example_text', ''),
-            placeholder="Type or paste your text here...",
+            placeholder="Type or paste your text here to detect hate speech or cyberbullying...",
             height=150,
             key="text_input"
         )
@@ -247,7 +219,7 @@ def main():
                 )
                 
                 # Display prediction result
-                st.subheader("🎯 Detection Result")
+                st.subheader("Detection Result")
                 
                 if prediction == 0:
                     st.markdown(f"""
@@ -286,7 +258,7 @@ def main():
                 
                 # Confidence scores visualization
                 if show_confidence:
-                    st.subheader("📊 Confidence Analysis")
+                    st.subheader("Confidence Analysis")
                     
                     fig = go.Figure(data=[
                         go.Bar(name='Confidence', 
@@ -319,7 +291,7 @@ def main():
                 
                 # Detailed probability analysis
                 if show_details:
-                    st.subheader("🔍 Detailed Analysis")
+                    st.subheader("Detailed Analysis")
                     
                     col1, col2, col3 = st.columns(3)
                     
@@ -342,109 +314,9 @@ def main():
                         )
     
     with tab2:
-        st.header("Batch File Analysis")
+        st.header("Model Performance")
         
-        uploaded_file = st.file_uploader(
-            "Upload CSV file with text content",
-            type=['csv'],
-            help="CSV file should contain a column with text data to analyze"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                df = pd.read_csv(uploaded_file)
-                st.success(f"✅ File uploaded successfully! {len(df)} rows found.")
-                
-                # Let user select text column
-                text_column = st.selectbox("Select text column", df.columns)
-                
-                if st.button("📊 Analyze All Texts", type="primary", use_container_width=True):
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    # Process all texts
-                    results = []
-                    total_texts = len(df)
-                    
-                    for i, text in enumerate(df[text_column]):
-                        prediction, probabilities, class_name, rule_used = enhanced_predict(
-                            text, vectorizer, model, rule_components, use_enhanced_rules
-                        )
-                        results.append({
-                            'text': text,
-                            'prediction': prediction,
-                            'class_name': class_name,
-                            'hate_speech_prob': probabilities[0],
-                            'cyberbullying_prob': probabilities[1],
-                            'neutral_prob': probabilities[2],
-                            'rule_based': rule_used
-                        })
-                        
-                        # Update progress
-                        progress = (i + 1) / total_texts
-                        progress_bar.progress(progress)
-                        status_text.text(f"Processed {i + 1}/{total_texts} texts...")
-                    
-                    results_df = pd.DataFrame(results)
-                    status_text.text("✅ Analysis complete!")
-                    
-                    # Display results
-                    st.subheader("📈 Analysis Summary")
-                    
-                    # Summary statistics
-                    col1, col2, col3, col4, col5 = st.columns(5)
-                    with col1:
-                        st.metric("Total Texts", len(results_df))
-                    with col2:
-                        hate_count = len(results_df[results_df['prediction'] == 0])
-                        st.metric("Hate Speech", hate_count)
-                    with col3:
-                        cyberbullying_count = len(results_df[results_df['prediction'] == 1])
-                        st.metric("Cyberbullying", cyberbullying_count)
-                    with col4:
-                        neutral_count = len(results_df[results_df['prediction'] == 2])
-                        st.metric("Neutral", neutral_count)
-                    with col5:
-                        rule_based_count = len(results_df[results_df['rule_based'] == True])
-                        st.metric("Rule-Based", rule_based_count)
-                    
-                    # Distribution chart
-                    fig = px.pie(
-                        results_df, 
-                        names='class_name',
-                        title='Content Distribution Analysis',
-                        color='class_name',
-                        color_discrete_map={
-                            'Hate Speech': '#ff4b4b',
-                            'Cyberbullying': '#ff9800', 
-                            'Neutral': '#4caf50'
-                        }
-                    )
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Show data table
-                    st.subheader("📋 Detailed Results")
-                    st.dataframe(results_df, use_container_width=True)
-                    
-                    # Download results
-                    csv = results_df.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download Results as CSV",
-                        data=csv,
-                        file_name="hate_speech_cyberbullying_results.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
-                        
-            except Exception as e:
-                st.error(f"❌ Error processing file: {e}")
-    
-    with tab3:
-        st.header("📊 Model Performance & Insights")
-        
-        # Updated performance metrics
-        st.subheader("🎯 Current Model Performance")
+        # Performance metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -452,28 +324,26 @@ def main():
         with col2:
             st.metric("Weighted F1-Score", "82.5%")
         with col3:
-            st.metric("Hate Speech F1", "92.8%", "+45.8%")
+            st.metric("Hate Speech F1", "92.8%")
         with col4:
             st.metric("Cyberbullying F1", "77.9%")
         
-        # Class-wise performance with updated metrics
-        st.subheader("📈 Class-wise Performance")
+        # Class-wise performance
+        st.subheader("Class-wise Performance")
         
         performance_data = {
-            'Class': ['🚫 Hate Speech (0)', '⚠️ Cyberbullying (1)', '✅ Neutral (2)'],
-            'Precision': [0.9376, 0.8151, 0.5332],
-            'Recall': [0.9191, 0.7458, 0.6582],
-            'F1-Score': [0.9283, 0.7789, 0.5891],
-            'Support': [4760, 3033, 1501]
+            'Class': ['🚫 Hate Speech', '⚠️ Cyberbullying', '✅ Neutral'],
+            'Precision': ['93.8%', '81.5%', '53.3%'],
+            'Recall': ['91.9%', '74.6%', '65.8%'],
+            'F1-Score': ['92.8%', '77.9%', '58.9%']
         }
         
         perf_df = pd.DataFrame(performance_data)
         st.dataframe(perf_df, use_container_width=True)
         
-        # Enhanced confusion matrix
-        st.subheader("🎲 Confusion Matrix")
+        # Confusion Matrix
+        st.subheader("Confusion Matrix")
         
-        # Sample confusion matrix data based on your results
         cm_data = np.array([[4376, 284, 100], 
                            [568, 2261, 204], 
                            [312, 202, 987]])
@@ -481,35 +351,49 @@ def main():
         fig, ax = plt.subplots(figsize=(8, 6))
         sns.heatmap(cm_data, annot=True, fmt='d', cmap='Blues', 
                     xticklabels=['Hate Speech', 'Cyberbullying', 'Neutral'],
-                    yticklabels=['Hate Speech', 'Cyberbullying', 'Neutral'],
-                    cbar_kws={'label': 'Number of Predictions'})
-        plt.title('Hate Speech & Cyberbullying Detection\n(Total Samples: 9,294)')
+                    yticklabels=['Hate Speech', 'Cyberbullying', 'Neutral'])
+        plt.title('Confusion Matrix (Total Samples: 9,294)')
         plt.xlabel('Predicted Label')
         plt.ylabel('True Label')
         st.pyplot(fig)
+    
+    with tab3:
+        st.header("About the System")
         
-        # Model information
         st.subheader("🔧 Technical Details")
         st.info("""
         **Enhanced Logistic Regression with TF-IDF Features**
         
-        **Key Improvements:**
+        **Key Features:**
         - ✅ **World-class hate speech detection** (93.8% precision)
         - ✅ **Effective cyberbullying detection** (81.5% precision)  
-        - ✅ **Balanced dataset** (Hate: 50.2%, Cyberbullying: 33.2%, Neutral: 16.7%)
-        - ✅ **Dual rule-based system** for critical content
-        - ✅ **Optimal threshold tuning** (39.4% for hate speech)
+        - ✅ **Rule-based enhancement** for critical content
+        - ✅ **Optimal threshold tuning** for hate speech
         
-        **Dataset Statistics:**
-        - Total samples: 46,467 after cleaning
-        - Hate Speech: Religion, Ethnicity, Gender-based content
-        - Cyberbullying: Age-based, Personal attacks, Harassment
-        - Training samples: 37,173 | Validation samples: 9,294
+        **Dataset:**
+        - 46,467 social media texts
+        - Balanced classes: Hate Speech (50%), Cyberbullying (33%), Neutral (17%)
+        - Covers: Religion, Ethnicity, Gender, Age-based bullying, Personal attacks
+        """)
         
-        **Performance Highlights:**
-        - Hate Speech: 93.8% precision, 91.9% recall
-        - Cyberbullying: 81.5% precision, 74.6% recall
-        - Rule-based system catches critical cases instantly
+        st.subheader("🎯 How It Works")
+        st.write("""
+        1. **Text Preprocessing**: Cleans and normalizes input text
+        2. **Feature Extraction**: Converts text to TF-IDF vectors with n-grams
+        3. **Rule-Based Detection**: Checks for critical keywords in hate speech and cyberbullying
+        4. **Machine Learning**: Uses logistic regression with class balancing
+        5. **Threshold Optimization**: Applies optimal thresholds for accurate classification
+        """)
+        
+        st.subheader("👥 Developed By")
+        st.write("""
+        **NED University of Engineering & Technology**  
+        **Natural Language Processing (CT-485) - Group Project**
+        
+        - Syed Hammad Atif (CTAI-22017)
+        - Abdul Waqar (CTAI-22042)
+        - Syed Muhammad Daniyal Qadri (CTAI-22037)
+        - Nofal Shameem (CTAI-22039)
         """)
 
 # Footer
@@ -517,8 +401,7 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center'>
     <p><strong>🚫 AI Hate Speech & Cyberbullying Detection System</strong></p>
-    <p>Developed by Group AI | Natural Language Processing Project | NED University</p>
-    <p>Syed Hammad Atif | Abdul Waqar | Syed Muhammad Daniyal Qadri | Nofal Shameem</p>
+    <p>Natural Language Processing Project | NED University</p>
 </div>
 """, unsafe_allow_html=True)
 
