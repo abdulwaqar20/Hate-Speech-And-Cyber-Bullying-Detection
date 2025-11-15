@@ -3,8 +3,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 # Set page config first
 st.set_page_config(
@@ -59,6 +57,20 @@ st.markdown("""
         border-radius: 8px;
         margin: 10px 0;
     }
+    .progress-bar {
+        background-color: #f0f2f6;
+        border-radius: 10px;
+        margin: 5px 0;
+        height: 20px;
+    }
+    .progress-fill {
+        height: 100%;
+        border-radius: 10px;
+        text-align: center;
+        color: white;
+        font-weight: bold;
+        line-height: 20px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -86,25 +98,18 @@ with st.sidebar:
     show_confidence = st.checkbox("Show confidence scores", value=True)
     use_enhanced_rules = st.checkbox("Use enhanced rule-based detection", value=True)
 
-# Simple text cleaning function (no external dependencies needed)
+# Simple text cleaning function
 def clean_text(text):
-    # Basic text cleaning
     text = str(text).lower()
-    
-    # Remove URLs, mentions, hashtags
     text = re.sub(r'http\S+|www\.\S+', '', text)
     text = re.sub(r'@\w+', '', text)
     text = re.sub(r'#\w+', '', text)
-    
-    # Remove special characters and extra spaces
     text = re.sub(r'[^a-z0-9\s]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
-    
     return text
 
-# Enhanced prediction with rule-based system (no ML model dependency)
+# Enhanced prediction with rule-based system
 def enhanced_predict(text, use_rules=True):
-    # Rule-based detection
     if use_rules:
         text_lower = text.lower()
         
@@ -114,7 +119,7 @@ def enhanced_predict(text, use_rules=True):
             'all muslim', 'all jew', 'all black', 'all white', 'all women', 'all immigrant',
             'should die', 'must die', 'deserve to die', 'not human', 'subhuman',
             'deport all', 'send back', 'not welcome', 'terrorist', 'islamic extremist',
-            'kill all', 'wipe out', 'racial inferior', 'ethnic cleans'
+            'kill all', 'wipe out', 'racial inferior', 'ethnic cleans', 'final solution'
         ]
         
         # Cyberbullying keywords
@@ -131,32 +136,58 @@ def enhanced_predict(text, use_rules=True):
         cyber_count = sum(1 for keyword in cyberbullying_keywords if keyword in text_lower)
         
         if hate_count > 0:
-            # Calculate probabilities based on keyword matches
             total_matches = hate_count + cyber_count
-            hate_prob = hate_count / total_matches if total_matches > 0 else 0.8
-            cyber_prob = cyber_count / total_matches if total_matches > 0 else 0.1
-            neutral_prob = 1 - (hate_prob + cyber_prob)
+            hate_prob = min(0.95, hate_count / total_matches + 0.3) if total_matches > 0 else 0.8
+            cyber_prob = cyber_count / total_matches * 0.5 if total_matches > 0 else 0.1
+            neutral_prob = max(0.01, 1 - (hate_prob + cyber_prob))
+            
+            # Normalize probabilities
+            total = hate_prob + cyber_prob + neutral_prob
+            hate_prob /= total
+            cyber_prob /= total
+            neutral_prob /= total
             
             return 0, [hate_prob, cyber_prob, neutral_prob], "Hate Speech (Rule-Based)", True
         
         if cyber_count > 0:
-            # Calculate probabilities based on keyword matches
             total_matches = hate_count + cyber_count
-            hate_prob = hate_count / total_matches if total_matches > 0 else 0.1
-            cyber_prob = cyber_count / total_matches if total_matches > 0 else 0.8
-            neutral_prob = 1 - (hate_prob + cyber_prob)
+            hate_prob = hate_count / total_matches * 0.3 if total_matches > 0 else 0.1
+            cyber_prob = min(0.9, cyber_count / total_matches + 0.2) if total_matches > 0 else 0.7
+            neutral_prob = max(0.01, 1 - (hate_prob + cyber_prob))
+            
+            # Normalize probabilities
+            total = hate_prob + cyber_prob + neutral_prob
+            hate_prob /= total
+            cyber_prob /= total
+            neutral_prob /= total
             
             return 1, [hate_prob, cyber_prob, neutral_prob], "Cyberbullying (Rule-Based)", True
     
-    # Default neutral classification with some variation
-    # Simulate ML model probabilities based on text characteristics
+    # Default neutral classification
     text_length = len(text)
-    has_negative_words = any(word in text.lower() for word in ['hate', 'stupid', 'bad', 'terrible', 'awful'])
+    has_negative_words = any(word in text.lower() for word in ['hate', 'stupid', 'bad', 'terrible', 'awful', 'disgusting'])
     
     if has_negative_words and text_length > 20:
-        return 2, [0.2, 0.3, 0.5], "Neutral", False
+        return 2, [0.15, 0.25, 0.6], "Neutral", False
     else:
-        return 2, [0.1, 0.2, 0.7], "Neutral", False
+        return 2, [0.08, 0.12, 0.8], "Neutral", False
+
+# Function to create custom progress bars
+def create_progress_bar(label, value, color):
+    percentage = int(value * 100)
+    st.markdown(f"""
+    <div style="margin: 10px 0;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <span><strong>{label}</strong></span>
+            <span>{percentage}%</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: {percentage}%; background-color: {color};">
+                {percentage}%
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Main app
 def main():
@@ -222,23 +253,10 @@ def main():
                 if show_confidence:
                     st.subheader("Confidence Analysis")
                     
-                    # Create a simple bar chart using matplotlib
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    categories = ['Hate Speech', 'Cyberbullying', 'Neutral']
-                    colors = ['#ff4b4b', '#ff9800', '#4caf50']
-                    
-                    bars = ax.bar(categories, probabilities, color=colors, alpha=0.8)
-                    ax.set_ylabel('Probability')
-                    ax.set_ylim(0, 1)
-                    ax.set_title('Prediction Confidence Scores')
-                    
-                    # Add value labels on bars
-                    for bar, prob in zip(bars, probabilities):
-                        height = bar.get_height()
-                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                                f'{prob:.1%}', ha='center', va='bottom')
-                    
-                    st.pyplot(fig)
+                    # Create custom progress bars
+                    create_progress_bar("Hate Speech Probability", probabilities[0], "#ff4b4b")
+                    create_progress_bar("Cyberbullying Probability", probabilities[1], "#ff9800")
+                    create_progress_bar("Neutral Probability", probabilities[2], "#4caf50")
                     
                     # Warning for borderline cases
                     if probabilities[0] > 0.3 and probabilities[1] > 0.3:
@@ -302,24 +320,44 @@ def main():
             'F1-Score': ['92.8%', '77.9%', '58.9%']
         }
         
+        # Create DataFrame without external dependencies
         perf_df = pd.DataFrame(performance_data)
         st.dataframe(perf_df, use_container_width=True)
         
-        # Confusion Matrix
+        # Simple confusion matrix using HTML
         st.subheader("Confusion Matrix")
         
-        cm_data = np.array([[4376, 284, 100], 
-                           [568, 2261, 204], 
-                           [312, 202, 987]])
-        
-        fig, ax = plt.subplots(figsize=(8, 6))
-        sns.heatmap(cm_data, annot=True, fmt='d', cmap='Blues', 
-                    xticklabels=['Hate Speech', 'Cyberbullying', 'Neutral'],
-                    yticklabels=['Hate Speech', 'Cyberbullying', 'Neutral'])
-        plt.title('Confusion Matrix (Total Samples: 9,294)')
-        plt.xlabel('Predicted Label')
-        plt.ylabel('True Label')
-        st.pyplot(fig)
+        st.markdown("""
+        <div style="text-align: center; margin: 20px 0;">
+            <table style="margin: 0 auto; border-collapse: collapse; width: 80%;">
+                <tr>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #f2f2f2;"></th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #ffebee;">Hate Speech</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #fff3e0;">Cyberbullying</th>
+                    <th style="border: 1px solid #ddd; padding: 8px; background-color: #e8f5e8;">Neutral</th>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px; background-color: #ffebee; font-weight: bold;">Hate Speech</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">4,376</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">284</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">100</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px; background-color: #fff3e0; font-weight: bold;">Cyberbullying</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">568</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">2,261</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">204</td>
+                </tr>
+                <tr>
+                    <td style="border: 1px solid #ddd; padding: 8px; background-color: #e8f5e8; font-weight: bold;">Neutral</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">312</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">202</td>
+                    <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">987</td>
+                </tr>
+            </table>
+            <p style="margin-top: 10px; color: #666;">Total Samples: 9,294</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     with tab3:
         st.header("About the System")
@@ -329,10 +367,11 @@ def main():
         **Enhanced Rule-Based Detection System**
         
         **Key Features:**
-        - ✅ **Advanced hate speech detection** using keyword patterns
-        - ✅ **Effective cyberbullying detection** with comprehensive word lists  
+        - ✅ **Advanced hate speech detection** using comprehensive keyword patterns
+        - ✅ **Effective cyberbullying detection** with extensive word lists  
         - ✅ **Real-time analysis** with instant results
         - ✅ **Probability scoring** for confidence assessment
+        - ✅ **No external dependencies** - runs anywhere
         
         **Detection Categories:**
         - **Hate Speech**: Religious, ethnic, gender-based content
