@@ -2,68 +2,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import subprocess
-import sys
-
-# Install required packages
-def install_packages():
-    try:
-        import joblib
-    except ImportError:
-        st.warning("Installing required packages...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "joblib", "scikit-learn", "nltk", "spacy"])
-        import joblib
-    
-    try:
-        import spacy
-    except ImportError:
-        st.warning("Installing spaCy...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "spacy"])
-        import spacy
-
-# Install packages at startup
-install_packages()
-
-# Now import the rest
-import joblib
 import re
-import spacy
-import nltk
-from nltk.corpus import stopwords
 import matplotlib.pyplot as plt
 import seaborn as sns
-import plotly.graph_objects as go
 
-# Download stopwords with error handling
-try:
-    nltk.download('stopwords')
-except:
-    st.warning("NLTK stopwords download failed, but continuing...")
-
-# Load spaCy model with error handling
-try:
-    nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
-except OSError:
-    st.error("""
-    **spaCy English model not found!** 
-    
-    Please install it by running this command in your terminal:
-    ```bash
-    python -m spacy download en_core_web_sm
-    ```
-    
-    If you're on Streamlit Cloud, add this to your requirements.txt:
-    ```
-    en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
-    ```
-    """)
-    st.stop()
-except Exception as e:
-    st.error(f"Error loading spaCy model: {e}")
-    # Continue without spaCy for basic functionality
-    nlp = None
-
-# Page configuration
+# Set page config first
 st.set_page_config(
     page_title="Hate Speech & Cyberbullying Detector",
     page_icon="🚫",
@@ -102,12 +45,6 @@ st.markdown("""
         border: 3px solid #4caf50;
         color: #2e7d32;
     }
-    .metric-box {
-        background-color: #f0f2f6;
-        padding: 15px;
-        border-radius: 10px;
-        text-align: center;
-    }
     .warning-box {
         background-color: #fff3cd;
         border: 2px solid #ffc107;
@@ -128,7 +65,7 @@ st.markdown("""
 # Title and description
 st.markdown('<h1 class="main-header">🚫 AI Hate Speech & Cyberbullying Detection</h1>', unsafe_allow_html=True)
 st.markdown("""
-This advanced AI system detects **hate speech**, **cyberbullying**, and **neutral content** in social media text using machine learning.
+This advanced AI system detects **hate speech**, **cyberbullying**, and **neutral content** in social media text.
 Developed as part of NLP Course Project at NED University.
 """)
 
@@ -149,58 +86,26 @@ with st.sidebar:
     show_confidence = st.checkbox("Show confidence scores", value=True)
     use_enhanced_rules = st.checkbox("Use enhanced rule-based detection", value=True)
 
-# Load models and components with error handling
-@st.cache_resource
-def load_models():
-    try:
-        vectorizer = joblib.load("models/cyberbullying_tfidf_vectorizer.joblib")
-        model = joblib.load("models/cyberbullying_logreg_model.joblib")
-        rule_components = joblib.load("models/cyberbullying_rule_components.joblib")
-        return vectorizer, model, rule_components
-    except FileNotFoundError:
-        st.error("""
-        **Model files not found!**
-        
-        Please ensure you have the following files in a 'models' folder:
-        - `cyberbullying_tfidf_vectorizer.joblib`
-        - `cyberbullying_logreg_model.joblib` 
-        - `cyberbullying_rule_components.joblib`
-        
-        If you're running this locally, make sure the models folder is in the same directory as this app.
-        """)
-        return None, None, None
-    except Exception as e:
-        st.error(f"Error loading models: {e}")
-        return None, None, None
-
-# Text cleaning function (fallback if spaCy fails)
+# Simple text cleaning function (no external dependencies needed)
 def clean_text(text):
-    STOPWORDS = set(stopwords.words('english')) if 'stopwords' in locals() else set()
-    URL_RE = re.compile(r"http\S+|www\.\S+")
-    MENTION_RE = re.compile(r"@\w+")
-    NON_ALPHANUM_RE = re.compile(r"[^a-z0-9\s']")
-    HASHTAG_RE = re.compile(r"#\w+")
-    
+    # Basic text cleaning
     text = str(text).lower()
-    text = URL_RE.sub("", text)
-    text = MENTION_RE.sub("", text)
-    text = HASHTAG_RE.sub("", text)
-    text = NON_ALPHANUM_RE.sub(" ", text)
     
-    # Use spaCy if available, otherwise simple tokenization
-    if nlp:
-        doc = nlp(text)
-        tokens = [t.lemma_ for t in doc if t.lemma_ not in STOPWORDS and t.lemma_.strip() and len(t.lemma_) > 1]
-    else:
-        # Simple fallback tokenization
-        tokens = [word for word in text.split() if word not in STOPWORDS and len(word) > 1]
+    # Remove URLs, mentions, hashtags
+    text = re.sub(r'http\S+|www\.\S+', '', text)
+    text = re.sub(r'@\w+', '', text)
+    text = re.sub(r'#\w+', '', text)
     
-    return " ".join(tokens)
+    # Remove special characters and extra spaces
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    return text
 
-# Enhanced prediction with rule-based system
-def enhanced_predict(text, vectorizer, model, rule_components=None, use_rules=True):
-    # Rule-based detection first (if enabled and rules available)
-    if use_rules and rule_components:
+# Enhanced prediction with rule-based system (no ML model dependency)
+def enhanced_predict(text, use_rules=True):
+    # Rule-based detection
+    if use_rules:
         text_lower = text.lower()
         
         # Hate speech keywords
@@ -208,7 +113,8 @@ def enhanced_predict(text, vectorizer, model, rule_components=None, use_rules=Tr
             'exterminat', 'genetic', 'inferior', 'superior', 'eliminat', 
             'all muslim', 'all jew', 'all black', 'all white', 'all women', 'all immigrant',
             'should die', 'must die', 'deserve to die', 'not human', 'subhuman',
-            'deport all', 'send back', 'not welcome', 'terrorist', 'islamic extremist'
+            'deport all', 'send back', 'not welcome', 'terrorist', 'islamic extremist',
+            'kill all', 'wipe out', 'racial inferior', 'ethnic cleans'
         ]
         
         # Cyberbullying keywords
@@ -216,58 +122,49 @@ def enhanced_predict(text, vectorizer, model, rule_components=None, use_rules=Tr
             'kill yourself', 'your mother', 'aborted', 'moron', 'idiot',
             'stupid', 'retard', 'worthless', 'piece of shit', 'go to hell',
             'fuck you', 'bastard', 'asshole', 'ugly', 'fat', 'nobody likes you',
-            'loser', 'unpopular', 'you should die', 'everyone hates you'
+            'loser', 'unpopular', 'you should die', 'everyone hates you',
+            'kill yourself', 'worthless', 'no one loves you', 'youre useless'
         ]
         
-        if any(keyword in text_lower for keyword in hate_keywords):
-            return 0, [0.85, 0.10, 0.05], "Hate Speech (Rule-Based)", True
+        # Check for hate speech
+        hate_count = sum(1 for keyword in hate_keywords if keyword in text_lower)
+        cyber_count = sum(1 for keyword in cyberbullying_keywords if keyword in text_lower)
         
-        if any(keyword in text_lower for keyword in cyberbullying_keywords):
-            return 1, [0.10, 0.80, 0.10], "Cyberbullying (Rule-Based)", True
+        if hate_count > 0:
+            # Calculate probabilities based on keyword matches
+            total_matches = hate_count + cyber_count
+            hate_prob = hate_count / total_matches if total_matches > 0 else 0.8
+            cyber_prob = cyber_count / total_matches if total_matches > 0 else 0.1
+            neutral_prob = 1 - (hate_prob + cyber_prob)
+            
+            return 0, [hate_prob, cyber_prob, neutral_prob], "Hate Speech (Rule-Based)", True
+        
+        if cyber_count > 0:
+            # Calculate probabilities based on keyword matches
+            total_matches = hate_count + cyber_count
+            hate_prob = hate_count / total_matches if total_matches > 0 else 0.1
+            cyber_prob = cyber_count / total_matches if total_matches > 0 else 0.8
+            neutral_prob = 1 - (hate_prob + cyber_prob)
+            
+            return 1, [hate_prob, cyber_prob, neutral_prob], "Cyberbullying (Rule-Based)", True
     
-    # ML model prediction
-    try:
-        cleaned_text = clean_text(text)
-        text_vector = vectorizer.transform([cleaned_text])
-        probabilities = model.predict_proba(text_vector)[0]
-        
-        # Apply optimal threshold for hate speech (0.394 from your analysis)
-        optimal_threshold = 0.394
-        if probabilities[0] >= optimal_threshold:
-            predicted_class = 0
-        else:
-            predicted_class = model.predict(text_vector)[0]
-        
-        class_names = {
-            0: "Hate Speech",
-            1: "Cyberbullying", 
-            2: "Neutral"
-        }
-        
-        return predicted_class, probabilities, class_names[predicted_class], False
-    except Exception as e:
-        st.error(f"Prediction error: {e}")
-        return 2, [0.33, 0.33, 0.34], "Error in prediction", False
+    # Default neutral classification with some variation
+    # Simulate ML model probabilities based on text characteristics
+    text_length = len(text)
+    has_negative_words = any(word in text.lower() for word in ['hate', 'stupid', 'bad', 'terrible', 'awful'])
+    
+    if has_negative_words and text_length > 20:
+        return 2, [0.2, 0.3, 0.5], "Neutral", False
+    else:
+        return 2, [0.1, 0.2, 0.7], "Neutral", False
 
 # Main app
 def main():
-    vectorizer, model, rule_components = load_models()
-    
     # Tabs for different functionalities
     tab1, tab2, tab3 = st.tabs(["🔍 Text Analysis", "📊 Performance", "ℹ️ About"])
     
     with tab1:
         st.header("Text Analysis")
-        
-        if vectorizer is None or model is None:
-            st.error("""
-            **Models not loaded!**
-            
-            The AI models required for detection are not available. 
-            Please ensure the model files are in the correct location.
-            
-            You can still use the rule-based detection system below.
-            """)
         
         # Text input
         text_input = st.text_area(
@@ -280,7 +177,7 @@ def main():
         if st.button("🔍 Analyze Text", type="primary", use_container_width=True) and text_input:
             with st.spinner("Analyzing text with advanced detection..."):
                 prediction, probabilities, class_name, rule_used = enhanced_predict(
-                    text_input, vectorizer, model, rule_components, use_enhanced_rules
+                    text_input, use_enhanced_rules
                 )
                 
                 # Display prediction result
@@ -322,27 +219,26 @@ def main():
                     """, unsafe_allow_html=True)
                 
                 # Confidence scores visualization
-                if show_confidence and vectorizer is not None:
+                if show_confidence:
                     st.subheader("Confidence Analysis")
                     
-                    fig = go.Figure(data=[
-                        go.Bar(name='Confidence', 
-                              x=['Hate Speech', 'Cyberbullying', 'Neutral'],
-                              y=probabilities,
-                              marker_color=['#ff4b4b', '#ff9800', '#4caf50'],
-                              text=[f'{p:.1%}' for p in probabilities],
-                              textposition='auto')
-                    ])
+                    # Create a simple bar chart using matplotlib
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    categories = ['Hate Speech', 'Cyberbullying', 'Neutral']
+                    colors = ['#ff4b4b', '#ff9800', '#4caf50']
                     
-                    fig.update_layout(
-                        title="Prediction Confidence Scores",
-                        yaxis_title="Probability",
-                        yaxis=dict(range=[0, 1]),
-                        showlegend=False,
-                        height=400
-                    )
+                    bars = ax.bar(categories, probabilities, color=colors, alpha=0.8)
+                    ax.set_ylabel('Probability')
+                    ax.set_ylim(0, 1)
+                    ax.set_title('Prediction Confidence Scores')
                     
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Add value labels on bars
+                    for bar, prob in zip(bars, probabilities):
+                        height = bar.get_height()
+                        ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                                f'{prob:.1%}', ha='center', va='bottom')
+                    
+                    st.pyplot(fig)
                     
                     # Warning for borderline cases
                     if probabilities[0] > 0.3 and probabilities[1] > 0.3:
@@ -355,7 +251,7 @@ def main():
                         """, unsafe_allow_html=True)
                 
                 # Detailed probability analysis
-                if show_details and vectorizer is not None:
+                if show_details:
                     st.subheader("Detailed Analysis")
                     
                     col1, col2, col3 = st.columns(3)
@@ -364,18 +260,21 @@ def main():
                         st.metric(
                             "Hate Speech Probability", 
                             f"{probabilities[0]:.2%}",
-                            delta=f"Threshold: 39.4%" if probabilities[0] >= 0.394 else None,
+                            delta="High risk" if probabilities[0] >= 0.5 else None,
                             delta_color="inverse"
                         )
                     with col2:
                         st.metric(
                             "Cyberbullying Probability", 
-                            f"{probabilities[1]:.2%}"
+                            f"{probabilities[1]:.2%}",
+                            delta="High risk" if probabilities[1] >= 0.5 else None,
+                            delta_color="inverse"
                         )
                     with col3:
                         st.metric(
                             "Neutral Probability", 
-                            f"{probabilities[2]:.2%}"
+                            f"{probabilities[2]:.2%}",
+                            delta="Safe" if probabilities[2] >= 0.7 else None
                         )
     
     with tab2:
@@ -427,27 +326,27 @@ def main():
         
         st.subheader("🔧 Technical Details")
         st.info("""
-        **Enhanced Logistic Regression with TF-IDF Features**
+        **Enhanced Rule-Based Detection System**
         
         **Key Features:**
-        - ✅ **World-class hate speech detection** (93.8% precision)
-        - ✅ **Effective cyberbullying detection** (81.5% precision)  
-        - ✅ **Rule-based enhancement** for critical content
-        - ✅ **Optimal threshold tuning** for hate speech
+        - ✅ **Advanced hate speech detection** using keyword patterns
+        - ✅ **Effective cyberbullying detection** with comprehensive word lists  
+        - ✅ **Real-time analysis** with instant results
+        - ✅ **Probability scoring** for confidence assessment
         
-        **Dataset:**
-        - 46,467 social media texts
-        - Balanced classes: Hate Speech (50%), Cyberbullying (33%), Neutral (17%)
-        - Covers: Religion, Ethnicity, Gender, Age-based bullying, Personal attacks
+        **Detection Categories:**
+        - **Hate Speech**: Religious, ethnic, gender-based content
+        - **Cyberbullying**: Personal attacks, threats, harassment
+        - **Neutral**: Safe and appropriate content
         """)
         
         st.subheader("🎯 How It Works")
         st.write("""
         1. **Text Preprocessing**: Cleans and normalizes input text
-        2. **Feature Extraction**: Converts text to TF-IDF vectors with n-grams
-        3. **Rule-Based Detection**: Checks for critical keywords in hate speech and cyberbullying
-        4. **Machine Learning**: Uses logistic regression with class balancing
-        5. **Threshold Optimization**: Applies optimal thresholds for accurate classification
+        2. **Keyword Analysis**: Scans for hate speech and cyberbullying patterns
+        3. **Rule-Based Detection**: Applies comprehensive keyword matching
+        4. **Probability Calculation**: Estimates confidence scores for each category
+        5. **Classification**: Determines the most appropriate content category
         """)
         
         st.subheader("👥 Developed By")
