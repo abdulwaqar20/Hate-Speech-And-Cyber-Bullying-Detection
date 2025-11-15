@@ -2,6 +2,29 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import subprocess
+import sys
+
+# Install required packages
+def install_packages():
+    try:
+        import joblib
+    except ImportError:
+        st.warning("Installing required packages...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "joblib", "scikit-learn", "nltk", "spacy"])
+        import joblib
+    
+    try:
+        import spacy
+    except ImportError:
+        st.warning("Installing spaCy...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "spacy"])
+        import spacy
+
+# Install packages at startup
+install_packages()
+
+# Now import the rest
 import joblib
 import re
 import spacy
@@ -11,15 +34,34 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.graph_objects as go
 
-# Download stopwords
-nltk.download('stopwords')
+# Download stopwords with error handling
+try:
+    nltk.download('stopwords')
+except:
+    st.warning("NLTK stopwords download failed, but continuing...")
 
-# Load spaCy model
+# Load spaCy model with error handling
 try:
     nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
-except:
-    st.error("Please install spaCy English model: python -m spacy download en_core_web_sm")
+except OSError:
+    st.error("""
+    **spaCy English model not found!** 
+    
+    Please install it by running this command in your terminal:
+    ```bash
+    python -m spacy download en_core_web_sm
+    ```
+    
+    If you're on Streamlit Cloud, add this to your requirements.txt:
+    ```
+    en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+    ```
+    """)
     st.stop()
+except Exception as e:
+    st.error(f"Error loading spaCy model: {e}")
+    # Continue without spaCy for basic functionality
+    nlp = None
 
 # Page configuration
 st.set_page_config(
@@ -107,7 +149,7 @@ with st.sidebar:
     show_confidence = st.checkbox("Show confidence scores", value=True)
     use_enhanced_rules = st.checkbox("Use enhanced rule-based detection", value=True)
 
-# Load models and components
+# Load models and components with error handling
 @st.cache_resource
 def load_models():
     try:
@@ -115,13 +157,25 @@ def load_models():
         model = joblib.load("models/cyberbullying_logreg_model.joblib")
         rule_components = joblib.load("models/cyberbullying_rule_components.joblib")
         return vectorizer, model, rule_components
+    except FileNotFoundError:
+        st.error("""
+        **Model files not found!**
+        
+        Please ensure you have the following files in a 'models' folder:
+        - `cyberbullying_tfidf_vectorizer.joblib`
+        - `cyberbullying_logreg_model.joblib` 
+        - `cyberbullying_rule_components.joblib`
+        
+        If you're running this locally, make sure the models folder is in the same directory as this app.
+        """)
+        return None, None, None
     except Exception as e:
         st.error(f"Error loading models: {e}")
         return None, None, None
 
-# Text cleaning function
+# Text cleaning function (fallback if spaCy fails)
 def clean_text(text):
-    STOPWORDS = set(stopwords.words('english'))
+    STOPWORDS = set(stopwords.words('english')) if 'stopwords' in locals() else set()
     URL_RE = re.compile(r"http\S+|www\.\S+")
     MENTION_RE = re.compile(r"@\w+")
     NON_ALPHANUM_RE = re.compile(r"[^a-z0-9\s']")
@@ -132,8 +186,15 @@ def clean_text(text):
     text = MENTION_RE.sub("", text)
     text = HASHTAG_RE.sub("", text)
     text = NON_ALPHANUM_RE.sub(" ", text)
-    doc = nlp(text)
-    tokens = [t.lemma_ for t in doc if t.lemma_ not in STOPWORDS and t.lemma_.strip() and len(t.lemma_) > 1]
+    
+    # Use spaCy if available, otherwise simple tokenization
+    if nlp:
+        doc = nlp(text)
+        tokens = [t.lemma_ for t in doc if t.lemma_ not in STOPWORDS and t.lemma_.strip() and len(t.lemma_) > 1]
+    else:
+        # Simple fallback tokenization
+        tokens = [word for word in text.split() if word not in STOPWORDS and len(word) > 1]
+    
     return " ".join(tokens)
 
 # Enhanced prediction with rule-based system
@@ -165,44 +226,48 @@ def enhanced_predict(text, vectorizer, model, rule_components=None, use_rules=Tr
             return 1, [0.10, 0.80, 0.10], "Cyberbullying (Rule-Based)", True
     
     # ML model prediction
-    cleaned_text = clean_text(text)
-    text_vector = vectorizer.transform([cleaned_text])
-    probabilities = model.predict_proba(text_vector)[0]
-    
-    # Apply optimal threshold for hate speech (0.394 from your analysis)
-    optimal_threshold = 0.394
-    if probabilities[0] >= optimal_threshold:
-        predicted_class = 0
-    else:
-        predicted_class = model.predict(text_vector)[0]
-    
-    class_names = {
-        0: "Hate Speech",
-        1: "Cyberbullying", 
-        2: "Neutral"
-    }
-    
-    return predicted_class, probabilities, class_names[predicted_class], False
+    try:
+        cleaned_text = clean_text(text)
+        text_vector = vectorizer.transform([cleaned_text])
+        probabilities = model.predict_proba(text_vector)[0]
+        
+        # Apply optimal threshold for hate speech (0.394 from your analysis)
+        optimal_threshold = 0.394
+        if probabilities[0] >= optimal_threshold:
+            predicted_class = 0
+        else:
+            predicted_class = model.predict(text_vector)[0]
+        
+        class_names = {
+            0: "Hate Speech",
+            1: "Cyberbullying", 
+            2: "Neutral"
+        }
+        
+        return predicted_class, probabilities, class_names[predicted_class], False
+    except Exception as e:
+        st.error(f"Prediction error: {e}")
+        return 2, [0.33, 0.33, 0.34], "Error in prediction", False
 
 # Main app
 def main():
     vectorizer, model, rule_components = load_models()
-    
-    if vectorizer is None or model is None:
-        st.error("Please ensure model files are available in the 'models' folder:")
-        st.code("""
-        models/
-        ├── cyberbullying_tfidf_vectorizer.joblib
-        ├── cyberbullying_logreg_model.joblib
-        └── cyberbullying_rule_components.joblib
-        """)
-        return
     
     # Tabs for different functionalities
     tab1, tab2, tab3 = st.tabs(["🔍 Text Analysis", "📊 Performance", "ℹ️ About"])
     
     with tab1:
         st.header("Text Analysis")
+        
+        if vectorizer is None or model is None:
+            st.error("""
+            **Models not loaded!**
+            
+            The AI models required for detection are not available. 
+            Please ensure the model files are in the correct location.
+            
+            You can still use the rule-based detection system below.
+            """)
         
         # Text input
         text_input = st.text_area(
@@ -257,7 +322,7 @@ def main():
                     """, unsafe_allow_html=True)
                 
                 # Confidence scores visualization
-                if show_confidence:
+                if show_confidence and vectorizer is not None:
                     st.subheader("Confidence Analysis")
                     
                     fig = go.Figure(data=[
@@ -290,7 +355,7 @@ def main():
                         """, unsafe_allow_html=True)
                 
                 # Detailed probability analysis
-                if show_details:
+                if show_details and vectorizer is not None:
                     st.subheader("Detailed Analysis")
                     
                     col1, col2, col3 = st.columns(3)
